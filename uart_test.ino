@@ -15,7 +15,7 @@ typedef struct {
       uint8_t request : 1;
       uint8_t nack : 1; // tbc
       uint8_t use_checksum : 1; //tbc
-      uint8_t reserved : 4; //byte/word addressed, 8/16/32/64 bit addressing
+      uint8_t reserved : 4; //byte/word addressed, 8/16/32/64 bit addressing, address shift
     } fields;
     uint8_t value;
   } flags;
@@ -72,8 +72,8 @@ bool isHeaderAvailable(){
  return (queueLength>=header_len);
 }
 
-bool isDataAvailable(uint16_t data_len){
-  return (queueLength>=data_len);
+bool isDataAvailable(uint16_t data_len_words){
+  return (queueLength>=4*data_len_words);
 }
 
 void getMessageHeader(msg_header_t *header){
@@ -83,7 +83,7 @@ void getMessageHeader(msg_header_t *header){
 }
 
 void getMessageData(uint32_t *data, uint8_t len){
-  for (int i=0; i<len/4; i++){
+  for (int i=0; i<len; i++){
     uint32_t dataword=0;
     uint32_t b_rx;
     for (int j=0; j<4; j++){
@@ -100,14 +100,18 @@ void getMessage(message_t *message){
     for (int i=0; i<12; i++) {
       ((uint8_t *)(message->header))[i] = queue_pop();
     }
-        
-    data=0;
-    for (int j=0; j<4; j++){
-      //while (Serial1.available() <= 0) {}
-      uart_drx[j] = queue_pop(); //Serial1.read();
-      data = data + (uart_drx[j]<<((3-j)*8));
-     }
-     message->data[0] = data;      
+
+    if (message->header->command == 1){
+      for (int i=0; i<message->header->len; i++){
+        data=0;
+        for (int j=0; j<4; j++){
+          uart_drx[j] = queue_pop();
+          data = data + (uart_drx[j]<<((3-j)*8));
+        }
+        message->data[i] = data; 
+      } 
+    }
+         
   } else {;}
   //message= null;  
 }
@@ -116,10 +120,14 @@ void sendMessage(message_t *message){
   for (int i=0; i<12; i++) {
     Serial1.write(((uint8_t *)(message->header))[i]);
   }
-       
-  for (int j=0; j<4; j++){
-    Serial1.write(message->data[0]>>((3-j)*8));
-  } 
+
+  if (message->header->command == 0){
+    for (int i=0; i<message->header->len; i++){
+      for (int j=0; j<4; j++){
+        Serial1.write(message->data[i]>>((3-j)*8));
+      } 
+    }
+  }
 }
 
 
@@ -138,6 +146,8 @@ void setup() {
   message.header = &msg_header;
   message.data = msg_data;
   variable_list_len = sizeof(variable_list)/sizeof(uint32_t);
+
+  Serial.print(" -----Start:");
 }
 
 void loop() {
@@ -160,7 +170,7 @@ void loop() {
   //if (isMessageAvailable()){
   //  getMessage(&message);
 
-  if (waitingForHeader == false && isDataAvailable(message.header->len)){
+  if (waitingForHeader == false && (isDataAvailable(message.header->len) || message.header->command==0)){
     getMessageData(message.data, message.header->len);
     Serial.print(" ID:");
     Serial.print(message.header->id, HEX); 
@@ -180,9 +190,12 @@ void loop() {
     message.header->flags.fields.request = 0;
     // write command handling
     if (message.header->command == 1) {
-      if(message.header->len == 4){
+      if(message.header->len >= 1){
         if (message.header->addr + message.header->len <= variable_list_len){
-          ((uint32_t *) &variable_list)[message.header->addr] =  message.data[0];
+          for (int i=0; i<message.header->len; i++){
+            ((uint32_t *) &variable_list)[message.header->addr+i] =  message.data[i];
+            Serial.print("Saved: "); Serial.print(message.data[i],HEX);
+          }
           //generate response    
           response_generated = true;
           Serial.print("write");
@@ -192,9 +205,12 @@ void loop() {
 
     // read command handling
     if (message.header->command == 0) {
-      if(message.header->len == 4){
+      if(message.header->len >= 1){
         if (message.header->addr + message.header->len <= variable_list_len){
-          message.data[0] = ((uint32_t *) &variable_list)[message.header->addr];
+          for (int i=0; i<message.header->len; i++){
+            message.data[i] = ((uint32_t *) &variable_list)[message.header->addr+i];
+            Serial.print("Retrived: "); Serial.print(message.data[i],HEX);
+          }
           //generate response
           response_generated = true;
           Serial.print("read");
@@ -204,7 +220,7 @@ void loop() {
 
     if (response_generated == false) {
       // generate nack
-      message.header->flags.fields.nack=0;
+      message.header->flags.fields.nack=1;
     }
     
     sendMessage(&message);
