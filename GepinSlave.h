@@ -15,6 +15,12 @@ class GepinSlave
 {
 public:
 
+    typedef enum
+    {
+	COMMAND_READ  = 0,
+	COMMAND_WRITE    = 1, 
+    } CommandType;
+
 	// header definition
 	typedef struct { 
 	  uint8_t id;
@@ -52,6 +58,8 @@ public:
 	uint32_t *pVariables;
 	uint32_t variable_list_len;
 	
+	uint32_t offset;
+	
 	bool waitingForHeader = true;
 	
 	GepinSlave(uint32_t *pVariables);
@@ -59,7 +67,20 @@ public:
 	
 	void update(void);
 	
+	bool newMessage = false;
+	
+	uint32_t getVarAddr(uint32_t *pVar);
+	
+	typedef bool (*rw_cb_t)(message_t *message);
+		
+	
+	void registerReadCallback(rw_cb_t r_cb);
+	void registerWriteCallback(rw_cb_t w_cb);
+	
 private:
+
+	rw_cb_t readCallback;
+	rw_cb_t writeCallback;	
 	bool isMessageAvailable(void);
 	bool isHeaderAvailable(void);
 	bool isDataAvailable(uint16_t data_len_words);
