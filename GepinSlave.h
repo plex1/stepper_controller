@@ -16,20 +16,20 @@ class GepinSlave
 public:
 
 	// header definition
-	typedef struct {  
+	typedef struct { 
+	  uint8_t id;
+	  uint8_t x;// protocol identifier?
+	  uint8_t command;
 	  union {
 		struct {
-		  uint8_t incr : 1;
 		  uint8_t request : 1;
+		  uint8_t incr : 1;
 		  uint8_t nack : 1; // tbc
 		  uint8_t use_checksum : 1; //tbc
 		  uint8_t reserved : 4; //byte/word addressed, 8/16/32/64 bit addressing, address shift
 		} fields;
 		uint8_t value;
-	  } flags;
-	  uint8_t command;
-	  uint8_t x;// protocol identifier?
-	  uint8_t id;
+	  } flags;	  
 	  uint32_t addr;
 	  uint32_t len;
 	} __attribute__ ((aligned (4), packed)) msg_header_t;
@@ -57,7 +57,7 @@ public:
 	GepinSlave(uint32_t *pVariables);
 	GepinSlave(void);
 	
-	void loop(void);
+	void update(void);
 	
 private:
 	bool isMessageAvailable(void);
@@ -69,7 +69,6 @@ private:
 	void sendMessage(message_t *message);
 	
 };
-
 
 #endif 
 

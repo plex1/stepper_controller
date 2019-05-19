@@ -1,6 +1,7 @@
 
 #include "GepinSlave.h"
 #include "queue.h"
+#include "utils.h"
 
 void queue_push(const char l_item);
 
@@ -18,7 +19,7 @@ GepinSlave::GepinSlave(void)
 	message.data = msg_data;
 }
 
-void GepinSlave::loop(void)
+void GepinSlave::update(void)
 {
   int inByte;         // incoming serial byte	
   if (Serial1.available() > 0) {
@@ -27,7 +28,7 @@ void GepinSlave::loop(void)
     Serial.print(" IN:");
     Serial.print(inByte, HEX); 
     queue_push(inByte);
-    //Serial.write(inByte); //Debug
+    Serial.write(inByte); //Debug
   }
 
   if (waitingForHeader && isHeaderAvailable()){
@@ -111,6 +112,8 @@ void GepinSlave::getMessageHeader(msg_header_t *header){
     for (int i=0; i<header_len; i++) {
       ((uint8_t *)header)[i] = queue_pop();
     }
+	header->addr = ntohl(header->addr);
+	header->len = ntohl(header->len);
 }
 
 void GepinSlave::getMessageData(uint32_t *data, uint8_t len){
@@ -121,7 +124,7 @@ void GepinSlave::getMessageData(uint32_t *data, uint8_t len){
       b_rx = queue_pop();
       dataword = dataword + (b_rx<<((3-j)*8));
     }
-    data[i] = dataword; 
+    data[i] = ntohl(dataword); 
   }
 }
 
@@ -131,6 +134,8 @@ void GepinSlave::getMessage(message_t *message){
     for (int i=0; i<12; i++) {
       ((uint8_t *)(message->header))[i] = queue_pop();
     }
+	message->header->addr = ntohl(message->header->addr);
+	message->header->len = ntohl(message->header->len);
 	
 	uint32_t data;
     if (message->header->command == 1){
@@ -139,7 +144,7 @@ void GepinSlave::getMessage(message_t *message){
         for (int j=0; j<4; j++){
           data = data + (queue_pop()<<((3-j)*8));
         }
-        message->data[i] = data; 
+        message->data[i] = ntohl(data); 
       } 
     }
          
@@ -147,14 +152,20 @@ void GepinSlave::getMessage(message_t *message){
 }
 
 void GepinSlave::sendMessage(message_t *message){
+  message->header->addr = htonl(message->header->addr);
+  message->header->len = htonl(message->header->len);
   for (int i=0; i<12; i++) {
     Serial1.write(((uint8_t *)(message->header))[i]);
   }
+  message->header->addr = ntohl(message->header->addr);
+  message->header->len = ntohl(message->header->len);
 
-  if (message->header->command == 0){
+  uint32_t data;
+  if (message->header->command == 0){	
     for (int i=0; i<message->header->len; i++){
+	data = htonl(message->data[i]);		
       for (int j=0; j<4; j++){
-        Serial1.write(message->data[i]>>((3-j)*8));
+        Serial1.write(data>>((3-j)*8));
       } 
     }
   }

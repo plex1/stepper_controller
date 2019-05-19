@@ -26,5 +26,5 @@ void setup() {
 }
 
 void loop() {
-  gepin_slave.loop();
+  gepin_slave.update();
 }
