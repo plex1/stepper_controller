@@ -15,6 +15,8 @@ GepinSlave::GepinSlave(void)
 	offset = 0;
 	readCallback = NULL;
 	writeCallback = NULL;
+	readElemCallback = NULL;
+	writeElemCallback = NULL;
 	// assign variables
 	message.header = &msg_header;
 	message.data = msg_data;
@@ -28,6 +30,14 @@ void GepinSlave::registerWriteCallback(rw_cb_t w_cb){
 	writeCallback = w_cb;
 }
 
+void GepinSlave::registerReadElemCallback(re_cb_t re_cb){
+	readElemCallback = re_cb;
+}
+
+void GepinSlave::registerWriteElemCallback(we_cb_t we_cb){
+	writeElemCallback = we_cb;
+}
+
 uint32_t GepinSlave::getVarAddr(uint32_t *pVar)
 {
 	return ((uint32_t) pVar - (uint32_t) pVariables)/4;
@@ -39,53 +49,63 @@ void GepinSlave::update(void)
   if (Serial1.available() > 0) {
     // get incoming byte:
     inByte = Serial1.read();
-    Serial.print(" IN:");
-    Serial.print(inByte, HEX); 
+	if (debug_level>0){
+		Serial.print(" IN:");
+		Serial.print(inByte, HEX); //Debug
+	}
     queue_push(inByte);
-    Serial.write(inByte); //Debug
   }
 
   if (waitingForHeader && isHeaderAvailable()){
     getMessageHeader(message.header);
     waitingForHeader = false;
-    Serial.print("Rx Header \n");
+    if (debug_level>0){Serial.print("Rx Header \n");}
   }
 
   if (waitingForHeader == false && (isDataAvailable(message.header->len) || message.header->command==0)){
-    getMessageData(message.data, message.header->len);
-    Serial.print(" ID:");
-    Serial.print(message.header->id, HEX); 
-    Serial.print(" LEN:");
-    Serial.print(message.header->len, HEX); 
-    Serial.print(" Addr:");
-    Serial.print(message.header->addr,HEX); 
-    Serial.print(" Data:");
-    Serial.print(message.data[0],HEX); 
-    Serial.print(" request: ");
-    Serial.print(message.header->flags.fields.request, HEX);
-    Serial.print(" command: ");
-    Serial.print(message.header->command, HEX);
-    Serial.print("\n");
+    if (debug_level>0){
+		Serial.print(" ID:");
+		Serial.print(message.header->id, HEX); 
+		Serial.print(" LEN:");
+		Serial.print(message.header->len, HEX); 
+		Serial.print(" Addr:");
+		Serial.print(message.header->addr,HEX);  
+		Serial.print(" request: ");
+		Serial.print(message.header->flags.fields.request, HEX);
+		Serial.print(" command: ");
+		Serial.print(message.header->command, HEX);
+		Serial.print("\n");
+	}
 
     bool response_generated = false;
+	bool cb_return=false;
 	
     // write command handling
     if ((message.header->command == 1) && message.header->flags.fields.request) {
       if(message.header->len >= 1){
+		getMessageData(message.data, message.header->len);
+		if (debug_level>0){
+			Serial.print(" Data:");
+			Serial.print(message.data[0],HEX);
+		}
         if (message.header->addr + message.header->len <= variable_list_len){
 		  if (writeCallback!=NULL){
 			(*writeCallback)(&message);
 		  }
 		  uint32_t addr_cnt = message.header->addr;
-          for (int i=0; i<message.header->len; i++){			
+          for (int i=0; i<message.header->len; i++){
+			cb_return=false;
+			if (writeElemCallback !=NULL){
+					cb_return =(*writeElemCallback)(addr_cnt, message.data[i]);
+			}
             ((uint32_t *) pVariables)[addr_cnt] =  message.data[i];
-            Serial.print("Saved: "); Serial.print(message.data[i],HEX);
+            if (debug_level>0){Serial.print("Saved: "); Serial.print(message.data[i],HEX);}
 			if  (message.header->flags.fields.incr) addr_cnt += 1;
           }
           //generate response    
           response_generated = true;
 		  newMessage = true;
-          Serial.print(" write done ");
+          if (debug_level>0){Serial.print(" write done ");}
         }
       }
     }
@@ -94,22 +114,26 @@ void GepinSlave::update(void)
     if ((message.header->command == 0) && message.header->flags.fields.request) {
       if(message.header->len >= 1){
         if (message.header->addr + message.header->len <= variable_list_len){
-		  bool cb_return=false;
+		  cb_return=false;
 		  if (readCallback!=NULL){
-			  (*readCallback)(&message);
+			  cb_return =(*readCallback)(&message);
 		  }
 		  if (!cb_return){
 			  uint32_t addr_cnt = message.header->addr;
-			  for (int i=0; i<message.header->len; i++){			
-				message.data[i] = ((uint32_t *) pVariables)[addr_cnt];
-				Serial.print("Retrived: "); Serial.print(message.data[i],HEX);
+			  for (int i=0; i<message.header->len; i++){
+				cb_return=false;
+				if (readElemCallback !=NULL){
+					cb_return =(*readElemCallback)(addr_cnt, &message.data[i]);
+				}
+				if (!cb_return) {message.data[i] = ((uint32_t *) pVariables)[addr_cnt];}
+				if (debug_level>0){Serial.print("Retrived: "); Serial.print(message.data[i],HEX);}
 				if  (message.header->flags.fields.incr) addr_cnt += 1;
 				}
 		  }
           //generate response
           response_generated = true;
 		  newMessage = true;
-          Serial.print(" read done ");
+          if (debug_level>0){Serial.print(" read done ");}
         }
       }
     }
@@ -151,34 +175,19 @@ void GepinSlave::getMessageData(uint32_t *data, uint8_t len){
     uint32_t dataword=0;
     uint32_t b_rx;
     for (int j=0; j<4; j++){
-      b_rx = queue_pop();
+      b_rx = (unsigned char) queue_pop();
+	  if (debug_level>0){
+		  Serial.print(" pop:");
+		  Serial.print(b_rx, HEX);
+	  }
       dataword = dataword + (b_rx<<((3-j)*8)); //ntohl already here
     }
+	if (debug_level>0){
+		Serial.print(" dataword in getMessageData:");
+		Serial.print(dataword, HEX);
+	}
     data[i] = dataword; //ntohl(dataword); 
   }
-}
-
-void GepinSlave::getMessage(message_t *message){
-   if (isMessageAvailable()){
-    // get request
-    for (int i=0; i<12; i++) {
-      ((uint8_t *)(message->header))[i] = queue_pop();
-    }
-	message->header->addr = ntohl(message->header->addr)-offset;
-	message->header->len = ntohl(message->header->len);
-	
-	uint32_t data;
-    if (message->header->command == 1){
-      for (int i=0; i<message->header->len; i++){
-        data=0;
-        for (int j=0; j<4; j++){
-          data = data + (queue_pop()<<((3-j)*8)); //ntohl already here
-        }
-        message->data[i] = data; //ntohl(data); 
-      } 
-    }
-         
-  } else {;}
 }
 
 void GepinSlave::sendMessage(message_t *message){

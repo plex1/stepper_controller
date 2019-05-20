@@ -23,8 +23,8 @@ public:
 
 	// header definition
 	typedef struct { 
-	  uint8_t id;
-	  uint8_t x;// protocol identifier?
+	  uint8_t id; // protocol identifier?
+	  uint8_t tag;
 	  uint8_t command;
 	  union {
 		struct {
@@ -71,16 +71,25 @@ public:
 	
 	uint32_t getVarAddr(uint32_t *pVar);
 	
-	typedef bool (*rw_cb_t)(message_t *message);
+	typedef bool (*rw_cb_t)(message_t *message);  //read message / write message callback
+	typedef bool (*re_cb_t)(uint32_t addr, uint32_t *data);  // read element callback
+	typedef bool (*we_cb_t)(uint32_t addr, uint32_t data);   // write element callback
 		
 	
 	void registerReadCallback(rw_cb_t r_cb);
 	void registerWriteCallback(rw_cb_t w_cb);
+	void registerReadElemCallback(re_cb_t re_cb);
+	void registerWriteElemCallback(we_cb_t we_cb);
+	
+	uint16_t debug_level = 0;
 	
 private:
 
 	rw_cb_t readCallback;
-	rw_cb_t writeCallback;	
+	rw_cb_t writeCallback;
+	re_cb_t readElemCallback;
+	we_cb_t writeElemCallback;
+	
 	bool isMessageAvailable(void);
 	bool isHeaderAvailable(void);
 	bool isDataAvailable(uint16_t data_len_words);
