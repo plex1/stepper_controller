@@ -93,12 +93,14 @@ void GepinSlave::update(void)
 			(*writeCallback)(&message);
 		  }
 		  uint32_t addr_cnt = message.header->addr;
-          for (int i=0; i<message.header->len; i++){
+	      for (int i=0; i<message.header->len; i++){
 			cb_return=false;
 			if (writeElemCallback !=NULL){
 					cb_return =(*writeElemCallback)(addr_cnt, message.data[i]);
 			}
-            ((uint32_t *) pVariables)[addr_cnt] =  message.data[i];
+			if (writeElemCallback !=NULL && cb_return) {	
+				((uint32_t *) pVariables)[addr_cnt] =  message.data[i];
+			}
             if (debug_level>0){Serial.print("Saved: "); Serial.print(message.data[i],HEX);}
 			if  (message.header->flags.fields.incr) addr_cnt += 1;
           }
