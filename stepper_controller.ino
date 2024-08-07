@@ -117,23 +117,9 @@ bool writeElemCallback(uint32_t addr, uint32_t data){
   return false;
 }
 
-// change to one message callback?
 bool writeCallback(GepinSlave::message_t *message){
-  
-    /*if (gepin_slave.message.header->addr == gepin_slave.getVarAddr(&var_table.motor1_target_pos)) {
-      Serial.print("target motor 1 changed");
-      stepper1.moveTo((int32_t) gepin_slave.message.data[0]);
-   
-    } 
-    else if (gepin_slave.message.header->addr == gepin_slave.getVarAddr(&var_table.motor2_target_pos)) {
-      Serial.print("target motor 2 changed");
-      stepper2.moveTo((int32_t) gepin_slave.message.data[0]);
-   
-    }
-    else {
-      return false;
-    }
-  return true;*/
+
+  // this callback is not used, but writeElemCallback instead.
   return false;
 }
 
