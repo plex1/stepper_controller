@@ -5,8 +5,8 @@
 AccelStepper stepper1(AccelStepper::DRIVER, 2, 3);
 AccelStepper stepper2(AccelStepper::DRIVER, 4, 5);
 const int sleepPin = 7;
-const int m0_pin = 8;
-const int m1_pin = 9;
+const int m0_pin = 9;
+const int m1_pin = 8;
 const int speedScale = 1024;
 
 // global variables
